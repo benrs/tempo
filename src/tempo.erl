@@ -55,7 +55,7 @@
          format/2, format/3,
          format_unix/2, format_now/2, format_datetime/2]).
 
--type unix_timestamp() :: float().
+-type unix_timestamp() :: non_neg_integer().
 -type format()         :: binary()
                         | iso8601
                         | rfc1123
@@ -91,8 +91,9 @@ parse(Format, Bin, Type) ->
 %% @doc Helper function similar to {@link parse/3}.
 %%      @equiv parse(Format, Binary, timestamp)
 %% @end
--spec parse_unix(format(), binary()) -> {ok, unix_timestamp()}
-                                      | {error, format_mismatch}.
+-spec parse_unix(format(), binary()) -> {ok, unix_timestamp()} 
+                                      | {error, format_mismatch} 
+                                      | term().
 parse_unix(Format, Bin) ->
     case strptime(convert_format(Format), Bin) of
         {ok, Timestamp} ->
@@ -103,7 +104,7 @@ parse_unix(Format, Bin) ->
 %% @doc Helper function similar to {@link parse/3}.
 %%      @equiv parse(Format, Binary, now)
 %% @end
--spec parse_now(format(), binary()) -> {ok, erlang:timestamp()}
+-spec parse_now(format(), binary()) -> {ok, erlang:timestamp()} 
                                      | {error, format_mismatch}.
 parse_now(Format, Bin) ->
     case parse_unix(Format, Bin) of
@@ -113,21 +114,20 @@ parse_now(Format, Bin) ->
             MegaSecs = Timestamp div ?MEGA,
             Secs = Timestamp rem ?MEGA,
             {ok, {MegaSecs, Secs, MicroSecs}};
-        Err -> Err
+        _Err -> {error, format_mismatch}
     end.
 
 %% @doc Helper function similar to {@link parse/3}.
 %%      @equiv parse(Format, Binary, datetime)
 %% @end
--spec parse_datetime(format(), binary()) -> {ok, calendar:datetime()}
+-spec parse_datetime(format(), binary()) -> {ok, calendar:datetime()} 
                                           | {error, format_mismatch}.
 parse_datetime(Format, Bin) ->
     case parse_unix(Format, Bin) of
         {ok, Timestamp} ->
-            DT = calendar:gregorian_seconds_to_datetime(?EPOCH_ZERO +
-                                                            Timestamp),
+            DT = calendar:gregorian_seconds_to_datetime(?EPOCH_ZERO + Timestamp),
             {ok, DT};
-        Err -> Err
+        _Err -> {error, format_mismatch}
     end.
 
 %% @doc Formats {Type, Datetime} tuple according to Format. The way in which
@@ -171,7 +171,7 @@ format_unix(Format, Timestamp) ->
                                                 | {error, time_overflow}.
 format_now(Format, {MegaSecs, Secs, MicroSecs}) ->
     Timestamp = ?MEGA * MegaSecs + Secs + ?MICRO * MicroSecs,
-    format_unix(Format, Timestamp).
+    format_unix(Format, round(Timestamp)).
 
 %% @doc Helper function similar to {@link format/3}.
 %%      @equiv format(Format, Datetime, datetime)
@@ -197,14 +197,16 @@ convert_format(X)       -> error(badarg, [X]).
 %% @doc This function will be replaced with NIF's strptime.
 %% @end
 -spec strptime(binary(), binary()) -> {ok, integer()}
-                                    | {error, format_mismatch}.
+                                    | {error, format_mismatch}
+                                    | term().
 strptime(_Format, _DT) -> ?STUB.
 
 %% @private
 %% @doc This function will be replaced with NIF's strftime.
 %% @end
--spec strftime(binary(), integer()) -> {ok, binary()}
-                                     | {error, invalid_time}.
+-spec strftime(binary(), float()) -> {ok, binary()}
+                                     | {error, invalid_time}
+                                     | term().
 strftime(_Format, _DT) -> ?STUB.
 
 %% @private
@@ -225,5 +227,5 @@ nif_init() ->
 %% @private
 %% @doc Helper for exiting gracefully when NIF can't be loaded.
 %% @end
--spec not_loaded(pos_integer()) -> ok.
-not_loaded(Line) -> exit({not_loaded, [{module, ?MODULE}, {line, Line}]}).
+-spec not_loaded(non_neg_integer()) -> term().
+not_loaded(Line) -> erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, Line}]}).
